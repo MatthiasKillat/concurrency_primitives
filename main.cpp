@@ -15,15 +15,31 @@ bool isSomethingToDo()
     return doSomething;
 }
 
+void workAfterWakeUp()
+{
+    if (isSomethingToDo())
+    {
+        std::cout << "do something" << std::endl;
+        doSomething = false; //only one thread will do something ...
+    }
+    else
+    {
+        std::cout << "do nothing" << std::endl; //the other will do nothing
+    }
+}
+
 void wait()
 {
     std::cout << "wait" << std::endl;
     //lock.lock(); //not necessary to hold the lock in this implementation
     cv.wait(lock, isSomethingToDo);
 
-    //we hold the lock and the condition is definitely true (since we changed it before notification)
+    //we hold the lock after wake up and the condition is definitly true (since we changed it before notification)
 
     std::cout << "woke up" << std::endl;
+
+    workAfterWakeUp();
+
     lock.unlock();
 }
 
