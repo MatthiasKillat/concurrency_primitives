@@ -4,7 +4,7 @@
 #include "lock.hpp"
 
 #include <mutex>      //only for lock_guard which can easily be implemented on its own
-#include <functional> //for the predicate
+#include <functional> //for the predicate, can be dropped if we pass the callable via template as e.g. std::thread does
 
 class ConditionVariable
 {
@@ -78,7 +78,7 @@ public:
         lock.lock();
     }
 
-    //todo: perfect forwarding with arbitrary predicate arguments (syntactic sugar)
+    //TODO: perfect forwarding with arbitrary predicate arguments (syntactic sugar)
     template <typename LockType>
     void wait(LockType &lock, std::function<bool(void)> predicate)
     {

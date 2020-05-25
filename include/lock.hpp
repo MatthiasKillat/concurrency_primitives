@@ -119,7 +119,7 @@ public:
 
 #if 0
 
-//or name it Mutex?
+//previous implementation, but seems to be unecessily complicated for no gain
 class Lock
 {
 
@@ -278,68 +278,6 @@ public:
             }
         } while (notUnlocked);
     }
-};
-
-#endif
-
-#if 0
-
-//simple lock wrapper, no error handling for simplicity
-
-#include <mutex>
-class Lock
-{
-public:
-    Lock()
-    {
-    }
-
-    Lock(const Lock &) = delete;
-    Lock(Lock &&) = delete;
-
-    void lock()
-    {
-        mut.lock();
-    }
-
-    void unlock()
-    {
-        mut.unlock();
-    }
-private:
-    std::mutex mut;
-};
-#endif
-
-#if 0
-
-#include "semaphore.hpp"
-
-//undefined behavior in many illegal cases for simplicity and performance , e.g. unlock before lock, multiple unlocks ...
-//this is in principle ok, but makes it easy to use wrong
-//a secure variant sacrifices performance and needs to use lower level primitives
-class Lock
-{
-public:
-    Lock()
-    {
-    }
-
-    Lock(const Lock &) = delete;
-    Lock(Lock &&) = delete;
-
-    void lock()
-    {
-        semaphore.wait();
-    }
-
-    void unlock()
-    {
-        semaphore.post();
-    }
-
-private:
-    Semaphore semaphore{1};
 };
 
 #endif

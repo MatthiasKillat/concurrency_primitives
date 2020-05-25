@@ -7,7 +7,7 @@
 #include <atomic>
 #include <limits>
 
-//actually it is a bounded semahore, but the bound is not configurable yet (which is easy to do)
+//actually it is a bounded semahore (i.e. with a maximum value), but the bound is not configurable yet (which is easy to do)
 class Semaphore
 {
 public:
@@ -150,62 +150,3 @@ private:
         syscall(SYS_futex, futexWord, numToWake, 0, 0, 0);
     }
 };
-
-#if 0
-#include <semaphore.h>
-
-//lightweight, concept work, no failure handling for simplicity
-class Semaphore
-{
-public:
-    Semaphore(int initialValue = 0)
-    {
-        if (sem_init(&sem, 0, initialValue) == -1)
-        {
-            valid = false;
-        }
-    }
-
-    ~Semaphore()
-    {
-        if (valid)
-        {
-            sem_destroy(&sem);
-        }
-    }
-
-    Semaphore(const Semaphore &) = delete;
-    Semaphore(Semaphore &&) = delete;
-
-    bool post()
-    {
-        if (valid)
-        {
-            if (sem_post(&sem) == -1)
-            {
-                return false;
-            }
-            return true;
-        }
-        return false;
-    }
-
-    bool wait()
-    {
-        if (valid)
-        {
-            if (sem_wait(&sem) == -1)
-            {
-                return false;
-            }
-            return true;
-        }
-        return false;
-    }
-
-private:
-    sem_t sem;
-    bool valid{true};
-};
-
-#endif
