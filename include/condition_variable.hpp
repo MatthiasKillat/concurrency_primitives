@@ -63,15 +63,16 @@ public:
         //note that these could come from a pool instead of new, limiting the number of possible waiting threads
         //in a directly controllable way (technically we are also limited now by the OS and available memory)
         auto node = new WaitNode;
+
         {
             std::lock_guard<Lock> guard(waitListLock);
             node->next = waitList;
             waitList = node;
+
+            lock.unlock();
+
+            node->semaphore.wait();
         }
-
-        lock.unlock();
-
-        node->semaphore.wait();
         delete node;
 
         //note that if the lock is not available we will proceed once it is, we were still woken up
@@ -89,26 +90,47 @@ public:
 
         auto node = new WaitNode;
 
+        {
+            std::lock_guard<Lock> guard(waitListLock);
+            node->next = waitList;
+            waitList = node;
+        }
+
         do
         {
-            //node must be reinserted when we wake up and sleep again if the condition is not true
-            //node cannot be removed here, because then multiple wake ups of the same node could happen
-            //it must be removed by the notify call under waitListLock
-            //major todo: there is potential for a lost wake up, further analysis required
-
-            {
-                std::lock_guard<Lock> guard(waitListLock);
-                node->next = waitList;
-                waitList = node;
-            }
-
             lock.unlock();
             node->semaphore.wait();
 
             // important to lock before checking the predicate
             // if this predicate can only change during lock (contract) we are sure that it holds after the wait call returns
             lock.lock();
-        } while (!predicate()); //if there there is a spurious wake up we release the lock and wait again
+
+            //we may need to reinsert the node if the predicate is false and need the lock to make sure
+            //we lose no concurrent notifications
+            //(the node is already removed and cannot be notified, this does not matter until we check the predicate
+            //and decide to sleep again, any concurrent wake up during this time would also just cause us to check the
+            //predicate ... which we are about to do anyway)
+
+            std::lock_guard<Lock> guard(waitListLock); //pessimistic locking, we only need it if predicate is false
+
+            //no notifications are possible for anyone
+            if (predicate())
+            {
+                //notifications are possible again
+                break;
+            }
+            else
+            {
+                //node must be reinserted when we wake up and sleep again if the condition is not true
+                //node cannot be removed on wake up, because then multiple wake ups of the same node could happen
+                //it must be removed by the notify call under waitListLock
+                node->next = waitList;
+                waitList = node;
+            }
+
+            //notifications are possible again
+
+        } while (true);
 
         delete node;
     }
