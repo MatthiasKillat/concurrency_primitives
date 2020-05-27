@@ -88,14 +88,20 @@ public:
         }
 
         auto node = new WaitNode;
-        {
-            std::lock_guard<Lock> guard(waitListLock);
-            node->next = waitList;
-            waitList = node;
-        }
 
         do
         {
+            //node must be reinserted when we wake up and sleep again if the condition is not true
+            //node cannot be removed here, because then multiple wake ups of the same node could happen
+            //it must be removed by the notify call under waitListLock
+            //major todo: there is potential for a lost wake up, further analysis required
+
+            {
+                std::lock_guard<Lock> guard(waitListLock);
+                node->next = waitList;
+                waitList = node;
+            }
+
             lock.unlock();
             node->semaphore.wait();
 
@@ -107,7 +113,8 @@ public:
         delete node;
     }
 
-    void notifyOne()
+    void
+    notifyOne()
     {
         std::lock_guard<Lock> guard(waitListLock);
         if (waitList)
