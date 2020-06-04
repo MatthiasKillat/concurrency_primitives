@@ -9,6 +9,6 @@ add_executable(condition_variable
   ${SOURCES}
 )
 
-target_link_libraries(condition_variable pthread)
+target_link_libraries(condition_variable pthread rt)
 
 

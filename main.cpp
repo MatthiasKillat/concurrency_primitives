@@ -3,7 +3,9 @@
 #include <chrono>
 
 #include "semaphore.hpp"
-#include "condition_variable.hpp"
+//#include "condition_variable.hpp"
+#include "timeout_condition_variable.hpp"
+using ConditionVariable = TimeoutConditionVariable;
 
 Lock lock;
 ConditionVariable cv;
@@ -31,8 +33,12 @@ void workAfterWakeUp()
 void wait()
 {
     std::cout << "wait" << std::endl;
-    //lock.lock(); //not necessary to hold the lock in this implementation
-    cv.wait(lock, isSomethingToDo);
+    lock.lock(); //not necessary to hold the lock in this implementation
+
+    auto time = std::chrono::milliseconds(2000);
+    bool status = cv.wait(lock, isSomethingToDo, time);
+
+    //status is true if the predicate was true at the time of wake up
 
     //we hold the lock after wake up and the condition is definitly true (since we changed it before notification)
 
@@ -41,6 +47,8 @@ void wait()
     workAfterWakeUp();
 
     lock.unlock();
+
+    std::cout << "work done" << std::endl;
 }
 
 void notify()
@@ -52,12 +60,12 @@ void notify()
     doSomething = true; //condition should only change under lock
     lock.unlock();
 
-    cv.notifyAll();
+    cv.notifyOne();
+    std::cout << "notify done" << std::endl;
 }
 
 int main(int argc, char **argv)
 {
-
     std::thread t1(wait);
     std::thread t2(wait);
     std::thread t3(notify);
