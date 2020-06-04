@@ -207,9 +207,10 @@ public:
 
         } while (!predicateResult); //if there is a spurious wake up we release the lock and wait again
 
-        //the node was already removed by the notify or the timeout call, so it can be safely deleted
-
-        //also deletes the timer, if any (no ...this is a big todo, how to deal with the timer deletion)
+        //the node was already removed from the list by the notify or the timeout call, so it can be safely deleted
+        //even if the other still fires, it will find no node in the list and thus not work on deleted data
+        //TODO: but, in principle, it seems it could work on a newly created node on the heap with the same address,
+        //which would not be correct (kind of an ABA problem with pointers...)
 
         std::cout << "deleting node " << node << std::endl;
         delete node;
