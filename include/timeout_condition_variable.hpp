@@ -176,7 +176,7 @@ public:
 
         auto node = new WaitNode;
 
-        if (!node->createTimer(this, waitTime))
+        if (!node || !node->createTimer(this, waitTime))
         {
             //we could not create a timer and cannot fullfill the contract without it (could block indefinitely)
             //we therefore return (todo: can be enhanced with some expected, to signal the error)
@@ -211,6 +211,7 @@ public:
         //even if the other still fires, it will find no node in the list and thus not work on deleted data
         //TODO: but, in principle, it seems it could work on a newly created node on the heap with the same address,
         //which would not be correct (kind of an ABA problem with pointers...)
+        //could give nodes ascending ids
 
         std::cout << "deleting node " << node << std::endl;
         delete node;
