@@ -14,6 +14,12 @@ private:
 public:
     Mutex() = default;
 
+    Mutex(const Mutex &) = delete;
+    Mutex(Mutex &&) = delete;
+
+    Mutex &operator=(const Mutex &) = delete;
+    Mutex &operator=(Mutex &&) = delete;
+
     void lock()
     {
         if (contenders.fetch_add(1, std::memory_order_acquire) > 0)
