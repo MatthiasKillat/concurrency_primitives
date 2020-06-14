@@ -5,43 +5,43 @@
 #include <vector>
 #include <stdint.h>
 
-#include "lock.hpp"
-#include "mutex.hpp"
+#include "semaphore.hpp"
+#include "posix_semaphore.hpp"
+#include "lightweight_semphore.hpp"
 
-struct NoLock
-{
-    void lock() {}
+using LightSemaphore = LightweightSemaphore<Semaphore>;
+using LightPosixSemaphore = LightweightSemaphore<PosixSemaphore>;
 
-    void unlock() {}
-};
-
-int64_t count{0};
-
-template <typename LockType>
-void work(LockType &lock, int a = 1, int iterations = 1000000)
+template <typename SemaphoreType>
+void wait(SemaphoreType &semaphore, int iterations = 1000000)
 {
     for (int i = 0; i < iterations; ++i)
     {
-        lock.lock();
-        count += a;
-        lock.unlock();
+        semaphore.wait();
     }
 }
 
-template <typename LockType>
+template <typename SemaphoreType>
+void signal(SemaphoreType &semaphore, int iterations = 1000000)
+{
+    for (int i = 0; i < iterations; ++i)
+    {
+        semaphore.post();
+    }
+}
+
+template <typename SemaphoreType>
 void test(int iterations = 1000000, int n = 4)
 {
-    LockType lock;
+    SemaphoreType semaphore;
 
     std::vector<std::thread> threads;
     threads.reserve(2 * n);
 
-    count = 0;
-
     for (int i = 0; i < n; ++i)
     {
-        threads.emplace_back(work<LockType>, std::ref(lock), 1, iterations);
-        threads.emplace_back(work<LockType>, std::ref(lock), -1, iterations);
+        threads.emplace_back(wait<SemaphoreType>, std::ref(semaphore), iterations);
+        threads.emplace_back(signal<SemaphoreType>, std::ref(semaphore), iterations);
     }
 
     for (auto &thread : threads)
@@ -57,34 +57,34 @@ int main(int argc, char **argv)
 
     {
         auto start = std::chrono::high_resolution_clock::now();
-        test<NoLock>(iterations, n);
+        test<Semaphore>(iterations, n);
         auto end = std::chrono::high_resolution_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-        std::cout << "NoLock test: count " << count << " time " << elapsed.count() << "ms" << std::endl;
+        std::cout << "Semaphore test: time " << elapsed.count() << "ms" << std::endl;
     }
 
     {
         auto start = std::chrono::high_resolution_clock::now();
-        test<std::mutex>(iterations, n);
+        test<PosixSemaphore>(iterations, n);
         auto end = std::chrono::high_resolution_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-        std::cout << "std::mutex test: count " << count << " time " << elapsed.count() << "ms" << std::endl;
+        std::cout << "PosixSemaphore test: time " << elapsed.count() << "ms" << std::endl;
     }
 
     {
         auto start = std::chrono::high_resolution_clock::now();
-        test<Lock>(iterations, n);
+        test<LightSemaphore>(iterations, n);
         auto end = std::chrono::high_resolution_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-        std::cout << "Lock test: count " << count << " time " << elapsed.count() << "ms" << std::endl;
+        std::cout << "LightSemaphore test: time " << elapsed.count() << "ms" << std::endl;
     }
 
     {
         auto start = std::chrono::high_resolution_clock::now();
-        test<Mutex>(iterations, n);
+        test<LightPosixSemaphore>(iterations, n);
         auto end = std::chrono::high_resolution_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-        std::cout << "Mutex: count " << count << " time " << elapsed.count() << "ms" << std::endl;
+        std::cout << "LightPosixSemaphore test: time " << elapsed.count() << "ms" << std::endl;
     }
 
     return 0;

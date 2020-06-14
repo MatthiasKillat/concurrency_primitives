@@ -21,4 +21,9 @@ add_executable(test_locks
 
 target_link_libraries(test_locks pthread rt)
 
+add_executable(test_semaphores
+  test_semaphores.cpp)
+
+target_link_libraries(test_semaphores pthread rt)
+
 

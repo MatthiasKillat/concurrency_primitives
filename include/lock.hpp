@@ -94,7 +94,7 @@ public:
         }
 
         //spinning failed, assume the lock is contested and change its state accordingly,
-        //sleep while it is actually contested
+        //sleep while it is actually contested or locked
 
         while (exchangeState(CONTESTED) != UNLOCKED)
         {
