@@ -88,6 +88,8 @@ public:
             return;
         }
 
+        //todo: notify here may be a problem, "lost wakeup"
+
         auto node = new WaitNode;
 
         {
@@ -124,6 +126,7 @@ public:
                 //node must be reinserted when we wake up and sleep again if the condition is not true
                 //node cannot be removed on wake up, because then multiple wake ups of the same node could happen
                 //it must be removed by the notify call under waitListLock
+                
                 node->next = waitList;
                 waitList = node;
             }

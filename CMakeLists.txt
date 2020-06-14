@@ -16,4 +16,9 @@ add_executable(auto_reset_event
 
 target_link_libraries(auto_reset_event pthread rt)
 
+add_executable(test_locks
+  test_locks.cpp)
+
+target_link_libraries(test_locks pthread rt)
+
 

@@ -8,6 +8,10 @@ class AutoResetEvent
 public:
     AutoResetEvent(int64_t initialCount = 0) : m_count(initialCount)
     {
+        if (m_count > 1)
+        {
+            m_count = 1;
+        }
     }
 
     void signal()
@@ -31,8 +35,7 @@ public:
         }
     }
 
-    void
-    wait()
+    void wait()
     {
         auto count = m_count.fetch_sub(1, std::memory_order_relaxed);
 

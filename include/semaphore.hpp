@@ -11,9 +11,13 @@
 class Semaphore
 {
 public:
-    Semaphore(size_t initialValue = 0) : value{initialValue}
+    Semaphore(int initialValue = 0) : value{initialValue}
     {
-        futexWord = reinterpret_cast<int *>(&value);
+        if (value < 0)
+        {
+            value = 0;
+        }
+        futexWord = reinterpret_cast<int *>(&value); //todo: need the correct type and size (futex requires int)
     }
 
     ~Semaphore()
@@ -35,7 +39,7 @@ public:
             }
 
             //value > 0, try to decrement the value (ensure that it cannot fall below 0)
-        } while (!value.compare_exchange_strong(oldValue, oldValue - 1, std::memory_order_relaxed, std::memory_order_relaxed));
+        } while (!value.compare_exchange_strong(oldValue, oldValue - 1, std::memory_order_release, std::memory_order_relaxed));
 
         return true;
     }
@@ -102,25 +106,10 @@ public:
 
         //we finished the increment (or returned because value is already MAX_VALUE)
 
-        //on first sight there appears to be a subtle race (lost wakeup) between this call and wait,
-        //but this should pose no problem (there may be other problems though, it still requires some careful analysis)
-
-        //potential lost wake up should NOT be possible:
-        //i) if we execute the load before anybody is waiting (waitCount == 0), this is fine and no one needs to be woken up
-        //ii) if we execute the load after anyone waiting is already sleeping, this is also fine, wake will wake up someone waiting
-        //    (not necessarily the last one waiting though, up to the futex_wake implementation which will probably use FIFO order)
-        //iii) if we execute the load after waitCount dropped back to 0 there is definitely nobody sleeping and we do not need to
-        //     wake up anyonne
-        //iv) critical case: waitCount was incremented but the wait call did not put the caller to sleep yet (via futex_wait)
-        // subcase A) value > 0 : because someone else called post, then wait will not go to sleep and the futex_wake(increment)
-        // call is wasted but causes no harm
-        // subcase B) value = 0 : cannot happen without another interfering wait or tryWait, we incremented the value above before
-        // exiting the while loop (furthermore, the value must have been 0 otherwise we would not consider sleeping and
-        // use the fast return path from tryWait instead)
-
-        //TODO: rethink analysis, there might still be some (small?) problem
-
         //is someone waiting?
+        //note: not needed if the futex works, but we want to avoid a syscall if possible
+        //note: if someone is waiting, it is guaranteed that waitCount > 0 (but not vice versa)
+
         if (waitCount.load(std::memory_order_acquire) != 0)
         {
             //we are only responsible for waking how many we actually incremented, waking more is not necessary
@@ -132,11 +121,11 @@ public:
     }
 
 private:
-    std::atomic<size_t> value;
-    std::atomic<size_t> waitCount{0};
+    std::atomic<int> value;
+    std::atomic<int> waitCount{0};
 
     //we could easily make this max limit configurable later, e.g. as template parameter or member set during construction
-    static constexpr size_t MAX_VALUE = std::numeric_limits<size_t>::max();
+    static constexpr int MAX_VALUE = std::numeric_limits<int>::max();
 
     int *futexWord;
 
