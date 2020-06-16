@@ -6,6 +6,8 @@
 #include <mutex>      //only for lock_guard which can easily be implemented on its own
 #include <functional> //for the predicate, can be dropped if we pass the callable via template as e.g. std::thread does
 
+//major todo: implement this variant without list nodes but just one semaphore, limited use case for only one predicate
+
 class ConditionVariable
 {
 
@@ -126,7 +128,7 @@ public:
                 //node must be reinserted when we wake up and sleep again if the condition is not true
                 //node cannot be removed on wake up, because then multiple wake ups of the same node could happen
                 //it must be removed by the notify call under waitListLock
-                
+
                 node->next = waitList;
                 waitList = node;
             }

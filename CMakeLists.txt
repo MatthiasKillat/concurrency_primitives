@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(concurrency_primitives )
 
+add_compile_options("-O3")
+
 include_directories( include )
 
 FILE(GLOB SOURCES "*.cpp")

@@ -8,6 +8,9 @@
 
 //todo: interprocess lock with futex word relative to this
 
+//major todo: correct size_t and int types were needed (has to work with futex API)
+//adaptive spinning?
+
 class Lock
 {
 
@@ -19,7 +22,7 @@ private:
         CONTESTED = 2 //there are (possibly) other threads waiting for the lock
     };
 
-    const size_t MAX_SPINNING_ACQUIRE_ITERATIONS{1};
+    const size_t MAX_SPINNING_ACQUIRE_ITERATIONS{1000};
 
     //must be 32 bit int for futex to work (make this explicit int32_t)
     std::atomic<int> state{UNLOCKED};
