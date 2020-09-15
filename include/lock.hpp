@@ -7,39 +7,37 @@
 #include <atomic>
 
 //todo: interprocess lock with futex word relative to this
-
-//major todo: correct size_t and int types were needed (has to work with futex API)
 //adaptive spinning?
 
 class Lock
 {
 
 private:
-    enum State : int
+    enum State : int32_t
     {
         UNLOCKED = 0, //unlocked, i.e. no one has the lock
         LOCKED = 1,   //locked and no one else waits for the lock
         CONTESTED = 2 //there are (possibly) other threads waiting for the lock
     };
 
-    const size_t MAX_SPINNING_ACQUIRE_ITERATIONS{1000};
+    const uint32_t MAX_SPINNING_ACQUIRE_ITERATIONS{1000};
 
     //must be 32 bit int for futex to work (make this explicit int32_t)
-    std::atomic<int> state{UNLOCKED};
+    std::atomic<int32_t> state{UNLOCKED};
 
     //note: it is fairly obvious how to make this usable as interprocess mutex:
     //the futex word must be available in different address space,
     // i.e. the atomic must be shared via shared memory between processes
     // a semaphore implementation using a futex can do this as well
-    int *futexWord;
+    int32_t *futexWord;
 
-    int compareExchangeState(int expected, int desired)
+    int compareExchangeState(int32_t expected, int32_t desired)
     {
         state.compare_exchange_strong(expected, desired, std::memory_order_relaxed, std::memory_order_relaxed);
         return expected; //always returns the old value (which is loaded by compare_exchange in the failure case)
     }
 
-    int exchangeState(int desired)
+    int32_t exchangeState(int32_t desired)
     {
         return state.exchange(desired, std::memory_order_relaxed);
     }
@@ -59,7 +57,7 @@ private:
     }
 
 public:
-    Lock(size_t maxSpinIterations = 1)
+    Lock(uint32_t maxSpinIterations = 1)
         : MAX_SPINNING_ACQUIRE_ITERATIONS(maxSpinIterations > 0 ? maxSpinIterations : 1)
     {
         //note: check in the standard if the memory has to be interpretable this way (!extremely important!)
@@ -75,7 +73,7 @@ public:
     void lock()
     {
         //try to acquire the lock by spinning
-        for (size_t i = 0; i < MAX_SPINNING_ACQUIRE_ITERATIONS; ++i)
+        for (uint32_t i = 0; i < MAX_SPINNING_ACQUIRE_ITERATIONS; ++i)
         {
             auto knownState = compareExchangeState(UNLOCKED, LOCKED);
             if (knownState == UNLOCKED)
