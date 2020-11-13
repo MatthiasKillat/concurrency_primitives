@@ -60,7 +60,8 @@ public:
     Lock(uint32_t maxSpinIterations = 1)
         : MAX_SPINNING_ACQUIRE_ITERATIONS(maxSpinIterations > 0 ? maxSpinIterations : 1)
     {
-        //note: check in the standard if the memory has to be interpretable this way (!extremely important!)
+        //note: the memory has to be interpretable this way, the standard guarantees this for atomic types
+        // that are small enough to support hardware atomic operations without implicit mutex
         //i.e. an atomic stores just raw memory for its data and nothing else
         //(or at least it has to start with this raw memory)
         //this is necessary to use it as the futex word to wait on

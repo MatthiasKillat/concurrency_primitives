@@ -1,11 +1,12 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.5)
 project(concurrency_primitives )
+
+set(CMAKE_CXX_STANDARD 17) 
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_compile_options("-O3")
 
 include_directories( include )
-
-FILE(GLOB SOURCES "*.cpp")
 
 add_executable(condition_variable
   main.cpp
@@ -27,5 +28,10 @@ add_executable(test_semaphores
   test_semaphores.cpp)
 
 target_link_libraries(test_semaphores pthread rt)
+
+add_executable(test_waitset
+  test_waitset.cpp)
+
+target_link_libraries(test_waitset pthread rt)
 
 
