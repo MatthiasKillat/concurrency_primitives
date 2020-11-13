@@ -16,9 +16,32 @@ public:
 
     std::optional<WaitToken> registerWaitSet(WaitSet &waitSet)
     {
-        m_token = waitSet.add([&]() { return this->hasData(); },
-                              [&]() { std::cout << "subscriber id " << m_id << " received " << m_data << std::endl; });
+        auto condition = [&]() { return this->hasData(); };
+        auto callback = [&]() {
+            auto maybeData = take();
+            std::cout << "subscriber id " << m_id << " received ";
+            if (maybeData.has_value())
+            {
+                std::cout << *maybeData << std::endl;
+            }
+            else
+            {
+                std::cout << " nothing" << std::endl;
+            }
+        };
+
+        m_token = waitSet.add(condition, callback);
         return m_token;
+    }
+
+    std::optional<int> take()
+    {
+        if (hasData())
+        {
+            //yes there is a race  with deliver, but this is not a real publisher/subscriber just a waitset experiment:-)
+            m_hasData = false;
+            return m_data;
+        }
     }
 
     void deliver(int data)
