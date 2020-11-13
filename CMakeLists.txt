@@ -34,4 +34,9 @@ add_executable(test_waitset
 
 target_link_libraries(test_waitset pthread rt)
 
+add_executable(test_waitset_pub_sub
+  test_waitset_pub_sub.cpp)
+
+target_link_libraries(test_waitset_pub_sub pthread rt)
+
 
