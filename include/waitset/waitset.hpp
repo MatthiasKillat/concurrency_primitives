@@ -8,6 +8,7 @@
 
 using Callback = std::function<void(void)>;
 using Condition = std::function<bool(void)>;
+using id_t = uint32_t;
 
 class WaitSet;
 
@@ -15,9 +16,37 @@ class WaitSet;
 class WaitNode
 {
 public:
-    bool eval() const
+    WaitNode(WaitSet *waitSet, const Condition &condition) : m_waitSet(waitSet), condition(condition)
+    {
+    }
+
+    WaitNode(WaitSet *waitSet, const Condition &condition, const Callback &callback) : m_waitSet(waitSet), condition(condition), callback(callback)
+    {
+    }
+
+    bool evalMonotonic()
+    {
+        if (result)
+        {
+            return true; //was true and not reset yet
+        }
+
+        if (condition())
+        {
+            result = true; //monotonic, can be set to true but not to false (can be set to false by waitset)
+            return true;
+        }
+        return false;
+    }
+
+    bool eval()
     {
         return condition();
+    }
+
+    bool getResult() const
+    {
+        return result;
     }
 
     void exec()
@@ -31,19 +60,17 @@ public:
         this->callback = callback;
     }
 
-    WaitNode(WaitSet *waitset, const Condition &condition) : condition(condition)
-    {
-    }
-
-    WaitNode(WaitSet *waitSet, const Condition &condition, const Callback &callback) : waitSet(waitSet), condition(condition), callback(callback)
-    {
-    }
-
     void notify();
 
+    void reset()
+    {
+        result = false;
+    }
+
 private:
-    WaitSet *waitSet;
+    WaitSet *m_waitSet;
     Condition condition;
+    bool result{false}; //todo: may need to use an atomic
     Callback callback;
 };
 
@@ -59,7 +86,7 @@ public:
     WaitToken(const WaitToken &) = default;
     WaitToken &operator=(const WaitToken &) = default;
 
-    uint64_t id()
+    id_t id()
     {
         return m_id;
     }
@@ -80,18 +107,18 @@ public:
     }
 
 private:
-    WaitToken(WaitNode &node, uint64_t id) : m_waitNode(&node), m_id(id)
+    WaitToken(WaitNode &node, id_t id) : m_waitNode(&node), m_id(id)
     {
     }
 
     WaitNode *m_waitNode{nullptr};
-    uint64_t m_id;
+    id_t m_id; //do we need this? only to locate the corresponding node in the vector
 };
 
 class WaitSet
 {
 public:
-    WaitSet(uint64_t capacity) : m_capacity(capacity)
+    WaitSet(id_t capacity) : m_capacity(capacity)
     {
         m_waitNodes.reserve(capacity);
     }
@@ -126,9 +153,33 @@ public:
         return WaitToken(node, id);
     }
 
-    void wait()
+    std::vector<id_t> wait()
     {
         m_semaphore.wait();
+
+        // find the nodes whose conditions were true
+        // (we have to iterate, we have no other information when we just use a single semaphore)
+        // alternatively notify could prepare a wakeup set ... but we need to eliminate duplicates and so on,
+        // losing any advantage for reasonably small numbers of conditions
+
+        std::vector<id_t> trueNodeIds;
+
+        auto n = m_waitNodes.size();
+        for (size_t id = 0; id < n; ++id)
+        {
+            WaitNode &node = m_waitNodes[id];
+            if (node.getResult())
+            {
+                trueNodeIds.push_back(id);
+                node.reset(); //set condition back to false
+                // someone may be setting them to true for a second time right now, but we have not fully woken up
+                // so that is ok (we can see that the condition was true, but not how many times it changed)
+                // if a new node becomes true there is another notify were it is set to true OR
+                // we registered it in already in this wakeup
+            }
+        }
+
+        return trueNodeIds;
     }
 
     void notify()
@@ -144,5 +195,9 @@ private:
 
 void WaitNode::notify()
 {
-    waitSet->notify();
+    if (evalMonotonic()) //is or was true and not yet reset
+    {
+        //notify if the condition is true
+        m_waitSet->notify();
+    }
 }
