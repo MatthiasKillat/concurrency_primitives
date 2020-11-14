@@ -1,6 +1,7 @@
 #pragma once
 
 #include "semaphore.hpp"
+#include "container.hpp"
 
 #include <vector>
 #include <functional>
@@ -126,37 +127,34 @@ private:
 class WaitSet
 {
 public:
-    WaitSet(id_t capacity) : m_capacity(capacity)
+    WaitSet(id_t capacity) : m_capacity(capacity), m_nodes(capacity)
     {
-        m_waitNodes.reserve(capacity);
     }
 
-    //todo: removal of nodes/conditions
     std::optional<WaitToken> add(const Condition &condition)
     {
-        if (m_waitNodes.size() >= m_capacity)
+        auto maybeId = m_nodes.emplace(this, condition);
+
+        if (!maybeId.has_value())
         {
             return std::nullopt;
         }
-        auto id = m_waitNodes.size();
-        m_waitNodes.emplace_back(this, condition);
+        auto id = *maybeId;
+        auto &node = m_nodes[id];
 
-        auto &node = m_waitNodes.back();
         return WaitToken(node, id);
     }
 
     std::optional<WaitToken> add(const Condition &condition, const Callback &callback)
     {
-        if (m_waitNodes.size() >= m_capacity)
+        auto maybeId = m_nodes.emplace(this, condition, callback);
+
+        if (!maybeId.has_value())
         {
             return std::nullopt;
         }
-
-        auto id = m_waitNodes.size();
-        m_waitNodes.emplace_back(this, condition);
-
-        auto &node = m_waitNodes.back();
-        node.setCallback(callback);
+        auto id = *maybeId;
+        auto &node = m_nodes[id];
 
         return WaitToken(node, id);
     }
@@ -175,10 +173,10 @@ public:
 
         WakeUpSet wakeUpSet;
 
-        auto n = m_waitNodes.size();
+        auto n = m_nodes.size();
         for (size_t id = 0; id < n; ++id)
         {
-            WaitNode &node = m_waitNodes[id];
+            WaitNode &node = m_nodes[id];
             if (node.getResult())
             {
                 node.exec();
@@ -207,10 +205,10 @@ public:
 
         WakeUpSet wakeUpSet;
 
-        auto n = m_waitNodes.size();
+        auto n = m_nodes.size();
         for (size_t id = 0; id < n; ++id)
         {
-            WaitNode &node = m_waitNodes[id];
+            WaitNode &node = m_nodes[id];
             if (node.getResult())
             {
                 wakeUpSet.push_back(id);
@@ -226,7 +224,7 @@ public:
 
         for (size_t id : wakeUpSet)
         {
-            m_waitNodes[id].exec();
+            m_nodes[id].exec();
         }
 
         return wakeUpSet;
@@ -238,9 +236,9 @@ public:
     }
 
 private:
-    Semaphore m_semaphore; //must be interprocess if used across process boundaries
-    std::vector<WaitNode> m_waitNodes;
     uint64_t m_capacity;
+    Semaphore m_semaphore; //must be interprocess if used across process boundaries
+    Container<WaitNode> m_nodes;
 };
 
 void WaitNode::notify()
