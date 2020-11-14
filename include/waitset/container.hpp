@@ -18,7 +18,7 @@ private:
         template <typename... Args>
         Node(Args &&... args) : element(std::forward<Args>(args)...) {}
 
-        bool used{true};
+        bool isUsed{true};
         T element;
     };
 
@@ -43,10 +43,35 @@ public:
 
         if (size() < capacity())
         {
-            //we can recycle a node
+            //finding a free entry brute with brute force is inefficient ...
+            for (index = 0; index < capacity(); ++index)
+            {
+                auto &node = m_nodes[index];
+                if (!node.isUsed)
+                {
+                    //alignment is ok, there was already a T before
+                    new (&node.element) T(std::forward<Args>(args)...);
+                    node.isUsed = true;
+                    ++m_size;
+                    return index;
+                }
+            }
         }
 
         return std::nullopt;
+    }
+
+    bool remove(index_t index)
+    {
+        auto &node = m_nodes[index];
+        if (node.isUsed)
+        {
+            node.element.~T(); //keep the memory but destroy the content
+            node.isUsed = false;
+            --m_size;
+            return true;
+        }
+        return false;
     }
 
     T &operator[](index_t index)

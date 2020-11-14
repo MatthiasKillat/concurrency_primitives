@@ -15,7 +15,13 @@ bool always_true()
     return true;
 }
 
-WaitSet waitSet(10);
+bool always_false()
+{
+    return false;
+}
+
+//limited to 3 conditions for this test
+WaitSet waitSet(3);
 
 WakeUpSet myFilter(WakeUpSet &unfiltered)
 {
@@ -72,6 +78,23 @@ void wait()
 
 int main(int argc, char **argv)
 {
+    auto maybeToken = waitSet.add(always_true);
+    if (!maybeToken.has_value())
+    {
+        std::cout << "could not get another token" << std::endl;
+        if (waitSet.remove(token1))
+        {
+            //we should have space again
+            //maybeToken = waitSet.add(always_false);
+            maybeToken = waitSet.add(always_true);
+            if (maybeToken.has_value())
+            {
+                std::cout << "regenerated token1 " << std::endl;
+                token1 = *maybeToken;
+            }
+        }
+    }
+
     std::thread waiter(wait);
     std::thread notifier(notify);
 

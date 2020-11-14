@@ -95,7 +95,7 @@ public:
     WaitToken(const WaitToken &) = default;
     WaitToken &operator=(const WaitToken &) = default;
 
-    id_t id()
+    id_t id() const
     {
         return m_id;
     }
@@ -157,6 +157,13 @@ public:
         auto &node = m_nodes[id];
 
         return WaitToken(node, id);
+    }
+
+    //todo: could later invalidate the returned token
+    //(but there can still be copies, which is useful for copying objects containing tokens)
+    bool remove(const WaitToken &token)
+    {
+        return m_nodes.remove(token.id());
     }
 
     //todo: we could also add a timed wait but in theory this can be done with a condition that is set to true by a timer
