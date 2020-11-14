@@ -6,6 +6,7 @@
 #include <vector>
 #include <functional>
 #include <optional>
+#include <mutex>
 
 using id_t = uint32_t;
 
@@ -133,6 +134,7 @@ public:
 
     std::optional<WaitToken> add(const Condition &condition)
     {
+        std::lock_guard g(m_nodesMutex);
         auto maybeId = m_nodes.emplace(this, condition);
 
         if (!maybeId.has_value())
@@ -147,6 +149,7 @@ public:
 
     std::optional<WaitToken> add(const Condition &condition, const Callback &callback)
     {
+        std::lock_guard g(m_nodesMutex);
         auto maybeId = m_nodes.emplace(this, condition, callback);
 
         if (!maybeId.has_value())
@@ -163,6 +166,7 @@ public:
     //(but there can still be copies, which is useful for copying objects containing tokens)
     bool remove(const WaitToken &token)
     {
+        std::lock_guard g(m_nodesMutex);
         return m_nodes.remove(token.id());
     }
 
@@ -180,6 +184,7 @@ public:
 
         WakeUpSet wakeUpSet;
 
+        std::lock_guard g(m_nodesMutex);
         auto n = m_nodes.size();
         for (size_t id = 0; id < n; ++id)
         {
@@ -212,18 +217,22 @@ public:
 
         WakeUpSet wakeUpSet;
 
-        auto n = m_nodes.size();
-        for (size_t id = 0; id < n; ++id)
         {
-            WaitNode &node = m_nodes[id];
-            if (node.getResult())
+            std::lock_guard g(m_nodesMutex);
+
+            auto n = m_nodes.size();
+            for (size_t id = 0; id < n; ++id)
             {
-                wakeUpSet.push_back(id);
-                node.reset(); //set condition back to false
-                // someone may be setting them to true for a second time right now, but we have not fully woken up
-                // so that is ok (we can see that the condition was true, but not how many times it changed)
-                // if a new node becomes true there is another notify were it is set to true OR
-                // we registered it in already in this wakeup
+                WaitNode &node = m_nodes[id];
+                if (node.getResult())
+                {
+                    wakeUpSet.push_back(id);
+                    node.reset(); //set condition back to false
+                    // someone may be setting them to true for a second time right now, but we have not fully woken up
+                    // so that is ok (we can see that the condition was true, but not how many times it changed)
+                    // if a new node becomes true there is another notify were it is set to true OR
+                    // we registered it in already in this wakeup
+                }
             }
         }
 
@@ -239,6 +248,7 @@ public:
 
     void notify()
     {
+        //we do not need the container mutex here
         m_semaphore.post();
     }
 
@@ -246,6 +256,17 @@ private:
     uint64_t m_capacity;
     Semaphore m_semaphore; //must be interprocess if used across process boundaries
     Container<WaitNode> m_nodes;
+
+    //protect m_nodes against concurrent modification
+    //we can only block the application calling wait, add and remove,
+    //but not the one calling notify
+    //to avoid this mutex, we would either state the contract that the set can only be modified
+    //in one thread while no one is notifying or waiting
+
+    //major todo: invalidate token on removal of node, otherwise we get a problem at notify accessing invalid data
+
+    //we do not want to add this to the container itself, we need a scoped lock for iteration
+    std::mutex m_nodesMutex;
 };
 
 void WaitNode::notify()

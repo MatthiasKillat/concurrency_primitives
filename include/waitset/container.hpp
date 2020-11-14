@@ -35,6 +35,7 @@ public:
         auto index = m_nodes.size();
         if (index < m_capacity)
         {
+            //todo: just construct into aligned memory in all cases later
             //create a new node
             m_nodes.emplace_back(std::forward<Args>(args)...);
             ++m_size;
@@ -43,7 +44,7 @@ public:
 
         if (size() < capacity())
         {
-            //finding a free entry brute with brute force is inefficient ...
+            //finding a free node with brute force is inefficient ...
             for (index = 0; index < capacity(); ++index)
             {
                 auto &node = m_nodes[index];
