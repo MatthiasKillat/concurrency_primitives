@@ -42,6 +42,7 @@ public:
             m_hasData = false;
             return m_data;
         }
+        return std::nullopt;
     }
 
     void deliver(int data)
@@ -96,7 +97,7 @@ Subscriber s1(1);
 Subscriber s2(2);
 Subscriber s3(3);
 
-auto guard = waitSet.add([&]() { return run == false; }, []() { std::cout << "\nguard callback\n"; }).value();
+auto guard = waitSet.add([run]() { return run == false; }, []() { std::cout << "\nguard callback\n"; }).value();
 
 void publish()
 {

@@ -40,10 +40,11 @@ WakeUpSet myFilter(WakeUpSet &unfiltered)
 //the advantage is that the token is linked to the condition,
 //it is also possible to notify the waitset directly
 
+//capturing statics causes warnings here, but works (we could rewrite it it but is non-essential for demonstration)
 auto token1 = waitSet.add(always_true).value();
-auto token2 = waitSet.add([&]() { return a == b; }, [&]() { std::cout << "\ncondition2 callback a=" << a << " b=" << b << "\n"; }).value();
+auto token2 = waitSet.add([a, b]() { return a == b; }, [a, b]() { std::cout << "\ncondition2 callback a=" << a << " b=" << b << "\n"; }).value();
 auto token3 = token1; //we can copy tokens provided by the waitset (shallow copy)
-auto guard = waitSet.add([&]() { return run == false; }, []() { std::cout << "\nguard callback\n"; }).value();
+auto guard = waitSet.add([run]() { return run == false; }, []() { std::cout << "\nguard callback\n"; }).value();
 
 //note: we assume only one waiter for now, but we can also add functionality to wake all or some number n
 

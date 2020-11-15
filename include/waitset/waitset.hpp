@@ -24,24 +24,24 @@ class WaitSet;
 class WaitNode
 {
 public:
-    WaitNode(WaitSet *waitSet, const Condition &condition) : m_waitSet(waitSet), condition(condition)
+    WaitNode(WaitSet *waitSet, const Condition &condition) : m_waitSet(waitSet), m_condition(condition)
     {
     }
 
-    WaitNode(WaitSet *waitSet, const Condition &condition, const Callback &callback) : m_waitSet(waitSet), condition(condition), callback(callback)
+    WaitNode(WaitSet *waitSet, const Condition &condition, const Callback &callback) : m_waitSet(waitSet), m_condition(condition), m_callback(callback)
     {
     }
 
     bool evalMonotonic()
     {
-        if (result)
+        if (m_result)
         {
             return true; //was true and not reset yet
         }
 
-        if (condition())
+        if (m_condition())
         {
-            result = true; //monotonic, can be set to true but not to false (can be set to false by waitset)
+            m_result = true; //monotonic, can be set to true but not to false (can be set to false by waitset)
             return true;
         }
         return false;
@@ -49,37 +49,48 @@ public:
 
     bool eval()
     {
-        return condition();
+        return m_condition();
     }
 
     bool getResult() const
     {
-        return result;
+        return m_result;
     }
 
     void exec()
     {
-        if (callback)
-            callback();
+        if (m_callback)
+            m_callback();
     }
 
     void setCallback(const Callback &callback)
     {
-        this->callback = callback;
+        this->m_callback = callback;
     }
 
     void notify();
 
     void reset()
     {
-        result = false;
+        m_result = false;
+    }
+
+    id_t id() const
+    {
+        return m_id;
+    }
+
+    void setId(id_t id)
+    {
+        m_id = id;
     }
 
 private:
+    id_t m_id;
     WaitSet *m_waitSet;
-    Condition condition;
-    bool result{false}; //todo: may need to use an atomic
-    Callback callback;
+    Condition m_condition;
+    bool m_result{false}; //todo: may need to use an atomic
+    Callback m_callback;
 };
 
 //proxy for client of waitset
@@ -98,7 +109,7 @@ public:
 
     id_t id() const
     {
-        return m_id;
+        return m_waitNode->id();
     }
 
     bool operator()()
@@ -117,12 +128,11 @@ public:
     }
 
 private:
-    WaitToken(WaitNode &node, id_t id) : m_waitNode(&node), m_id(id)
+    WaitToken(WaitNode &node) : m_waitNode(&node)
     {
     }
 
     WaitNode *m_waitNode{nullptr};
-    id_t m_id; //do we need this? only to locate the corresponding node in the vector
 };
 
 class WaitSet
@@ -143,8 +153,9 @@ public:
         }
         auto id = *maybeId;
         auto &node = m_nodes[id];
+        node.setId(id);
 
-        return WaitToken(node, id);
+        return WaitToken(node);
     }
 
     std::optional<WaitToken> add(const Condition &condition, const Callback &callback)
@@ -158,8 +169,9 @@ public:
         }
         auto id = *maybeId;
         auto &node = m_nodes[id];
+        node.setId(id);
 
-        return WaitToken(node, id);
+        return WaitToken(node);
     }
 
     //todo: could later invalidate the returned token
