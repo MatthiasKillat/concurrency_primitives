@@ -82,6 +82,7 @@ int main(int argc, char **argv)
     auto maybeToken = waitSet.add(always_true);
     if (!maybeToken.has_value())
     {
+        waitSet.remove(token3); //a copy of token1, if we do not remove it we cannot free the node (shared by token1 and token3)
         std::cout << "could not get another token" << std::endl;
         if (waitSet.remove(token1))
         {
@@ -90,8 +91,9 @@ int main(int argc, char **argv)
             maybeToken = waitSet.add(always_true);
             if (maybeToken.has_value())
             {
-                std::cout << "regenerated token1 " << std::endl;
                 token1 = *maybeToken;
+                token3 = token1;
+                std::cout << "regenerated token1 and its copy token3" << std::endl;
             }
         }
     }

@@ -8,6 +8,8 @@
 #include <optional>
 #include <mutex>
 
+//todo: refactor refcounting, move classes to separate files
+
 using id_t = uint32_t;
 
 //storing more specific conditions can be done without std::function (and thus without dynamic memory)
@@ -19,11 +21,15 @@ using WakeUpSet = std::vector<id_t>;
 using Filter = std::function<WakeUpSet(WakeUpSet &)>;
 
 class WaitSet;
+class WaitToken;
 
 //internal to waitset, waitset must outlive the node (nodes will be owned and destroyed by waitset)
 class WaitNode
 {
 public:
+    friend class WaitToken;
+    friend class WaitSet;
+
     WaitNode(WaitSet *waitSet, const Condition &condition) : m_waitSet(waitSet), m_condition(condition)
     {
     }
@@ -85,12 +91,30 @@ public:
         m_id = id;
     }
 
+    uint64_t numReferences() const
+    {
+        return m_refCount;
+    }
+
 private:
+    uint64_t m_refCount{0};
     id_t m_id;
     WaitSet *m_waitSet;
     Condition m_condition;
     bool m_result{false}; //todo: may need to use an atomic
     Callback m_callback;
+
+    uint64_t incrementRefCount()
+    {
+        ++m_refCount;
+        return m_refCount;
+    }
+
+    uint64_t decrementRefCount()
+    {
+        --m_refCount;
+        return m_refCount;
+    }
 };
 
 //proxy for client of waitset
@@ -102,10 +126,54 @@ class WaitToken
 public:
     friend class WaitSet;
 
-    //note: this makes it harder to implement something that tells the token that the waitset or node are gone
-    //because any copies must be informed as well ... (probably not worth it and not necessary if used correctly)
-    WaitToken(const WaitToken &) = default;
-    WaitToken &operator=(const WaitToken &) = default;
+    WaitToken(const WaitToken &other) : m_waitNode(other.m_waitNode)
+    {
+        if (isValid())
+        {
+            m_waitNode->incrementRefCount();
+        }
+    }
+
+    WaitToken &operator=(const WaitToken &rhs)
+    {
+        if (&rhs != this)
+        {
+            if (isValid())
+            {
+                m_waitNode->decrementRefCount();
+            }
+
+            m_waitNode = rhs.m_waitNode;
+            if (isValid())
+            {
+                m_waitNode->incrementRefCount();
+            }
+        }
+        return *this;
+    }
+
+    WaitToken(WaitToken &&other) : m_waitNode(other.m_waitNode)
+    {
+        other.m_waitNode = nullptr;
+    }
+
+    WaitToken &operator=(WaitToken &&rhs)
+    {
+        if (&rhs != this)
+        {
+            m_waitNode = rhs.m_waitNode;
+            rhs.m_waitNode = nullptr;
+        }
+        return *this;
+    }
+
+    ~WaitToken()
+    {
+        if (isValid())
+        {
+            m_waitNode->decrementRefCount();
+        }
+    }
 
     id_t id() const
     {
@@ -125,6 +193,25 @@ public:
     void notify()
     {
         m_waitNode->notify();
+    }
+
+    bool isValid()
+    {
+        return m_waitNode != nullptr;
+    }
+
+    void invalidate()
+    {
+        if (isValid())
+        {
+            m_waitNode->decrementRefCount();
+            m_waitNode = nullptr;
+            //todo: cannot call remove on WaitSet (as it is not fully defined and we cannot use virtual for an interface - design constraint)
+            //hence we cannot trigger a cleanup in the waitset here
+            //hence we have to give the token back to the waitset (which will then cleanup)
+            //it will also clean up if itself gets destroyed, but if there are any token out there in this case
+            //it is undefined behavior
+        }
     }
 
 private:
@@ -155,6 +242,8 @@ public:
         auto &node = m_nodes[id];
         node.setId(id);
 
+        //we create a WaitToken and hence increment the refCount
+        node.incrementRefCount();
         return WaitToken(node);
     }
 
@@ -171,15 +260,29 @@ public:
         auto &node = m_nodes[id];
         node.setId(id);
 
+        //we create a WaitToken and hence increment the refCount
+        node.incrementRefCount();
         return WaitToken(node);
     }
 
-    //todo: could later invalidate the returned token
-    //(but there can still be copies, which is useful for copying objects containing tokens)
-    bool remove(const WaitToken &token)
+    bool remove(WaitToken &token)
+    {
+        auto id = token.id();
+        token.invalidate();
+        return remove(id);
+    }
+
+    bool remove(id_t id)
     {
         std::lock_guard g(m_nodesMutex);
-        return m_nodes.remove(token.id());
+        auto &node = m_nodes[id];
+
+        //only remove it if no token references it anymore
+        if (node.numReferences() <= 0)
+        {
+            return m_nodes.remove(id);
+        }
+        return false;
     }
 
     //todo: we could also add a timed wait but in theory this can be done with a condition that is set to true by a timer
