@@ -1,6 +1,7 @@
 #pragma once
 
-#include "semaphore.hpp"
+//#include "semaphore.hpp"
+#include "autoreset_event.hpp"
 #include "container.hpp"
 
 #include <vector>
@@ -17,7 +18,7 @@ using Callback = std::function<void(void)>;
 using Condition = std::function<bool(void)>;
 
 using WakeUpSet = std::vector<id_t>;
-//in general a filter cannot just depend on single a id_t but the whole wake-up set
+//in general a filter cannot just depend on a single id_t but the whole wake-up set
 using Filter = std::function<WakeUpSet(WakeUpSet &)>;
 
 class WaitSet;
@@ -290,7 +291,7 @@ public:
     //we can only have one waiter for proper operation (concurrent condition result reset would cause problems!)
     WakeUpSet wait()
     {
-        m_semaphore.wait();
+        m_autoResetEvent.wait();
 
         // find the nodes whose conditions were true
         // (we have to iterate, we have no other information when we just use a single semaphore)
@@ -323,7 +324,7 @@ public:
     //could also register the filter to the waitset
     WakeUpSet wait(Filter filter)
     {
-        m_semaphore.wait();
+        m_autoResetEvent.wait();
 
         // find the nodes whose conditions were true
         // (we have to iterate, we have no other information when we just use a single semaphore)
@@ -364,12 +365,12 @@ public:
     void notify()
     {
         //we do not need the container mutex here
-        m_semaphore.post();
+        m_autoResetEvent.signal();
     }
 
 private:
     uint64_t m_capacity;
-    Semaphore m_semaphore; //must be interprocess if used across process boundaries
+    AutoResetEvent m_autoResetEvent; //must use interprocess if used across process boundaries
     Container<WaitNode> m_nodes;
 
     //protect m_nodes against concurrent modification
