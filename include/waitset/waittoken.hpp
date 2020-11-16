@@ -55,10 +55,7 @@ public:
 
     ~WaitToken()
     {
-        if (isValid())
-        {
-            m_waitNode->decrementRefCount();
-        }
+        invalidate();
     }
 
     id_t id() const
@@ -90,13 +87,11 @@ public:
     {
         if (isValid())
         {
-            m_waitNode->decrementRefCount();
+            if (m_waitNode->decrementRefCount())
+            {
+                m_waitNode->tryDelete();
+            }
             m_waitNode = nullptr;
-            //todo: cannot call remove on WaitSet (as it is not fully defined and we cannot use virtual for an interface - design constraint)
-            //hence we cannot trigger a cleanup in the waitset here
-            //hence we have to give the token back to the waitset (which will then cleanup)
-            //it will also clean up if itself gets destroyed, but if there are any token out there in this case
-            //it is undefined behavior
         }
     }
 

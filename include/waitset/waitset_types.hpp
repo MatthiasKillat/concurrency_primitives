@@ -18,3 +18,9 @@ using Filter = std::function<WakeUpSet(WakeUpSet &)>;
 class WaitSet;
 class WaitToken;
 class WaitNode;
+
+//Dependencies
+//WaitToken depends on WaitNode
+//WaitSet depends on WaitNode
+
+//WaitToken -> WaitNode <- WaitSet

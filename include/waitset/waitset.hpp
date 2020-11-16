@@ -34,6 +34,10 @@ public:
 
         //we create a WaitToken and hence increment the refCount
         node.incrementRefCount();
+
+        //todo: we need to be very careful here that this function call does not rely on anything it deletes...
+        node.setDeleter([=](id_t id) { this->remove(id); });
+
         return WaitToken(node);
     }
 
@@ -52,6 +56,10 @@ public:
 
         //we create a WaitToken and hence increment the refCount
         node.incrementRefCount();
+
+        //todo: we need to be very careful here that this function call does not rely on anything it deletes...
+        node.setDeleter([=](id_t id) { this->remove(id); });
+
         return WaitToken(node);
     }
 

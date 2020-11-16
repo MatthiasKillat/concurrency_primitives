@@ -8,6 +8,8 @@ class WaitNode
     friend class WaitToken;
     friend class WaitSet;
 
+    using Deleter = std::function<void(id_t &)>;
+
 public:
     WaitNode(WaitSet *waitSet, const Condition &condition) : m_waitSet(waitSet), m_condition(condition)
     {
@@ -50,7 +52,21 @@ public:
 
     void setCallback(const Callback &callback)
     {
-        this->m_callback = callback;
+        m_callback = callback;
+    }
+
+    //refactor this somewhat, e.g. construction time
+    void setDeleter(const Deleter &deleter)
+    {
+        m_deleter = deleter;
+    }
+
+    void tryDelete()
+    {
+        if (m_deleter)
+        {
+            m_deleter(m_id);
+        }
     }
 
     void notify();
@@ -82,6 +98,11 @@ private:
     Condition m_condition;
     bool m_result{false}; //todo: may need to use an atomic
     Callback m_callback;
+
+    //needed since we want to call a delete method of WaitSet in here but WaitSet depends on WaitNode itself
+    //(and want to avoid virtual interfaces)
+    //function must not depend on the node itself, since it may trigger its deletion
+    Deleter m_deleter;
 
     uint64_t incrementRefCount()
     {
