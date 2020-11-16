@@ -63,26 +63,6 @@ public:
         return WaitToken(node);
     }
 
-    bool remove(WaitToken &token)
-    {
-        auto id = token.id();
-        token.invalidate();
-        return remove(id);
-    }
-
-    bool remove(id_t id)
-    {
-        std::lock_guard g(m_nodesMutex);
-        auto &node = m_nodes[id];
-
-        //only remove it if no token references it anymore
-        if (node.numReferences() <= 0)
-        {
-            return m_nodes.remove(id);
-        }
-        return false;
-    }
-
     //todo: we could also add a timed wait but in theory this can be done with a condition that is set to true by a timer
 
     //we can only have one waiter for proper operation (concurrent condition result reset would cause problems!)
@@ -182,6 +162,19 @@ private:
 
     //we do not want to add this to the container itself, we need a scoped lock for iteration
     std::mutex m_nodesMutex;
+
+    bool remove(id_t id)
+    {
+        std::lock_guard g(m_nodesMutex);
+        auto &node = m_nodes[id];
+
+        //only remove it if no token references it anymore
+        if (node.numReferences() <= 0)
+        {
+            return m_nodes.remove(id);
+        }
+        return false;
+    }
 };
 
 //can only be defined when WaitSet is fully defined

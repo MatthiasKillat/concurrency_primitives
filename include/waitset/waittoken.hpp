@@ -24,10 +24,7 @@ public:
     {
         if (&rhs != this)
         {
-            if (isValid())
-            {
-                m_waitNode->decrementRefCount();
-            }
+            invalidate();
 
             m_waitNode = rhs.m_waitNode;
             if (isValid())
@@ -47,6 +44,7 @@ public:
     {
         if (&rhs != this)
         {
+            invalidate();
             m_waitNode = rhs.m_waitNode;
             rhs.m_waitNode = nullptr;
         }
@@ -87,7 +85,8 @@ public:
     {
         if (isValid())
         {
-            if (m_waitNode->decrementRefCount())
+            m_waitNode->decrementRefCount();
+            if (m_waitNode->numReferences() <= 0)
             {
                 m_waitNode->tryDelete();
             }
