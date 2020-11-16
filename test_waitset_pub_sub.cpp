@@ -97,7 +97,12 @@ Subscriber s1(1);
 Subscriber s2(2);
 Subscriber s3(3);
 
-auto guard = waitSet.add([run]() { return run == false; }, []() { std::cout << "\nguard callback\n"; }).value();
+bool guardCondition()
+{
+    return run == false;
+}
+
+auto guard = waitSet.add(guardCondition, []() { std::cout << "\nguard callback\n"; }).value();
 
 void publish()
 {
