@@ -1,6 +1,5 @@
 #pragma once
 
-//#include "semaphore.hpp"
 #include "autoreset_event.hpp"
 #include "container.hpp"
 
@@ -9,219 +8,9 @@
 #include <optional>
 #include <mutex>
 
-//todo: refactor refcounting, move classes to separate files
-
-using id_t = uint32_t;
-
-//storing more specific conditions can be done without std::function (and thus without dynamic memory)
-using Callback = std::function<void(void)>;
-using Condition = std::function<bool(void)>;
-
-using WakeUpSet = std::vector<id_t>;
-//in general a filter cannot just depend on a single id_t but the whole wake-up set
-using Filter = std::function<WakeUpSet(WakeUpSet &)>;
-
-class WaitSet;
-class WaitToken;
-
-//internal to waitset, waitset must outlive the node (nodes will be owned and destroyed by waitset)
-class WaitNode
-{
-public:
-    friend class WaitToken;
-    friend class WaitSet;
-
-    WaitNode(WaitSet *waitSet, const Condition &condition) : m_waitSet(waitSet), m_condition(condition)
-    {
-    }
-
-    WaitNode(WaitSet *waitSet, const Condition &condition, const Callback &callback) : m_waitSet(waitSet), m_condition(condition), m_callback(callback)
-    {
-    }
-
-    bool evalMonotonic()
-    {
-        if (m_result)
-        {
-            return true; //was true and not reset yet
-        }
-
-        if (m_condition())
-        {
-            m_result = true; //monotonic, can be set to true but not to false (can be set to false by waitset)
-            return true;
-        }
-        return false;
-    }
-
-    bool eval()
-    {
-        return m_condition();
-    }
-
-    bool getResult() const
-    {
-        return m_result;
-    }
-
-    void exec()
-    {
-        if (m_callback)
-            m_callback();
-    }
-
-    void setCallback(const Callback &callback)
-    {
-        this->m_callback = callback;
-    }
-
-    void notify();
-
-    void reset()
-    {
-        m_result = false;
-    }
-
-    id_t id() const
-    {
-        return m_id;
-    }
-
-    void setId(id_t id)
-    {
-        m_id = id;
-    }
-
-    uint64_t numReferences() const
-    {
-        return m_refCount;
-    }
-
-private:
-    uint64_t m_refCount{0};
-    id_t m_id;
-    WaitSet *m_waitSet;
-    Condition m_condition;
-    bool m_result{false}; //todo: may need to use an atomic
-    Callback m_callback;
-
-    uint64_t incrementRefCount()
-    {
-        ++m_refCount;
-        return m_refCount;
-    }
-
-    uint64_t decrementRefCount()
-    {
-        --m_refCount;
-        return m_refCount;
-    }
-};
-
-//proxy for client of waitset
-//only created by WaitSet, but can be copied by anyone
-//waitset must outlive the token (after the waitset is gone, the token should not be used)
-//todo: can we make this reasonably safe?
-class WaitToken
-{
-public:
-    friend class WaitSet;
-
-    WaitToken(const WaitToken &other) : m_waitNode(other.m_waitNode)
-    {
-        if (isValid())
-        {
-            m_waitNode->incrementRefCount();
-        }
-    }
-
-    WaitToken &operator=(const WaitToken &rhs)
-    {
-        if (&rhs != this)
-        {
-            if (isValid())
-            {
-                m_waitNode->decrementRefCount();
-            }
-
-            m_waitNode = rhs.m_waitNode;
-            if (isValid())
-            {
-                m_waitNode->incrementRefCount();
-            }
-        }
-        return *this;
-    }
-
-    WaitToken(WaitToken &&other) : m_waitNode(other.m_waitNode)
-    {
-        other.m_waitNode = nullptr;
-    }
-
-    WaitToken &operator=(WaitToken &&rhs)
-    {
-        if (&rhs != this)
-        {
-            m_waitNode = rhs.m_waitNode;
-            rhs.m_waitNode = nullptr;
-        }
-        return *this;
-    }
-
-    ~WaitToken()
-    {
-        if (isValid())
-        {
-            m_waitNode->decrementRefCount();
-        }
-    }
-
-    id_t id() const
-    {
-        return m_waitNode->id();
-    }
-
-    bool operator()()
-    {
-        return m_waitNode->eval();
-    }
-
-    void setCallback(const Callback &callback)
-    {
-        m_waitNode->setCallback(callback);
-    }
-
-    void notify()
-    {
-        m_waitNode->notify();
-    }
-
-    bool isValid()
-    {
-        return m_waitNode != nullptr;
-    }
-
-    void invalidate()
-    {
-        if (isValid())
-        {
-            m_waitNode->decrementRefCount();
-            m_waitNode = nullptr;
-            //todo: cannot call remove on WaitSet (as it is not fully defined and we cannot use virtual for an interface - design constraint)
-            //hence we cannot trigger a cleanup in the waitset here
-            //hence we have to give the token back to the waitset (which will then cleanup)
-            //it will also clean up if itself gets destroyed, but if there are any token out there in this case
-            //it is undefined behavior
-        }
-    }
-
-private:
-    WaitToken(WaitNode &node) : m_waitNode(&node)
-    {
-    }
-
-    WaitNode *m_waitNode{nullptr};
-};
+#include "waitset_types.hpp"
+#include "waittoken.hpp"
+#include "waitnode.hpp"
 
 class WaitSet
 {
@@ -327,8 +116,8 @@ public:
     //could also register the filter to the waitset
     WakeUpSet wait(Filter filter)
     {
-
         WakeUpSet wakeUpSet;
+
         do
         {
             m_autoResetEvent.wait();
@@ -387,6 +176,7 @@ private:
     std::mutex m_nodesMutex;
 };
 
+//can only be defined when WaitSet is fully defined
 void WaitNode::notify()
 {
     if (evalMonotonic()) //is or was true and not yet reset
