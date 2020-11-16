@@ -81,8 +81,8 @@ void wait()
 {
     while (run)
     {
-        auto ids = waitSet.wait();
-        //auto ids = waitSet.wait(myFilter);
+        //auto ids = waitSet.wait();
+        auto ids = waitSet.wait(myFilter); //filter the ids before waking up
 
         std::cout << "woke up with ids: ";
         for (auto id : ids)

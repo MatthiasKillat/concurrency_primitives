@@ -291,57 +291,25 @@ public:
     //we can only have one waiter for proper operation (concurrent condition result reset would cause problems!)
     WakeUpSet wait()
     {
-        m_autoResetEvent.wait();
-
-        // find the nodes whose conditions were true
-        // (we have to iterate, we have no other information when we just use a single semaphore)
-        // alternatively notify could prepare a wakeup set ... but we need to eliminate duplicates and so on,
-        // losing any advantage for reasonably small numbers of conditions
-
         WakeUpSet wakeUpSet;
 
-        std::lock_guard g(m_nodesMutex);
-        auto n = m_nodes.size();
-        for (size_t id = 0; id < n; ++id)
+        do
         {
-            WaitNode &node = m_nodes[id];
-            if (node.getResult())
-            {
-                node.exec();
-                wakeUpSet.push_back(id);
-                node.reset(); //set condition back to false
-                // someone may be setting them to true for a second time right now, but we have not fully woken up
-                // so that is ok (we can see that the condition was true, but not how many times it changed)
-                // if a new node becomes true there is another notify were it is set to true OR
-                // we registered it in already in this wakeup
-            }
-        }
+            m_autoResetEvent.wait();
 
-        return wakeUpSet;
-    }
+            // find the nodes whose conditions were true
+            // (we have to iterate, we have no other information when we just use a single semaphore)
+            // alternatively notify could prepare a wakeup set ... but we need to eliminate duplicates and so on,
+            // losing any advantage for reasonably small numbers of conditions
 
-    //Note: filtering the active conditions is a little specific but may be useful
-    //could also register the filter to the waitset
-    WakeUpSet wait(Filter filter)
-    {
-        m_autoResetEvent.wait();
-
-        // find the nodes whose conditions were true
-        // (we have to iterate, we have no other information when we just use a single semaphore)
-        // alternatively notify could prepare a wakeup set ... but we need to eliminate duplicates and so on,
-        // losing any advantage for reasonably small numbers of conditions
-
-        WakeUpSet wakeUpSet;
-
-        {
             std::lock_guard g(m_nodesMutex);
-
             auto n = m_nodes.size();
             for (size_t id = 0; id < n; ++id)
             {
                 WaitNode &node = m_nodes[id];
                 if (node.getResult())
                 {
+                    node.exec();
                     wakeUpSet.push_back(id);
                     node.reset(); //set condition back to false
                     // someone may be setting them to true for a second time right now, but we have not fully woken up
@@ -350,14 +318,46 @@ public:
                     // we registered it in already in this wakeup
                 }
             }
-        }
+        } while (wakeUpSet.empty()); //do not wake up when no conditions are true
 
-        wakeUpSet = filter(wakeUpSet);
+        return wakeUpSet;
+    }
 
-        for (size_t id : wakeUpSet)
+    //Note: filtering the active conditions is a little specific but may be useful
+    //could also register the filter to the waitset
+    WakeUpSet wait(Filter filter)
+    {
+
+        WakeUpSet wakeUpSet;
+        do
         {
-            m_nodes[id].exec();
-        }
+            m_autoResetEvent.wait();
+            {
+                std::lock_guard g(m_nodesMutex);
+
+                auto n = m_nodes.size();
+                for (size_t id = 0; id < n; ++id)
+                {
+                    WaitNode &node = m_nodes[id];
+                    if (node.getResult())
+                    {
+                        wakeUpSet.push_back(id);
+                        node.reset(); //set condition back to false
+                        // someone may be setting them to true for a second time right now, but we have not fully woken up
+                        // so that is ok (we can see that the condition was true, but not how many times it changed)
+                        // if a new node becomes true there is another notify were it is set to true OR
+                        // we registered it in already in this wakeup
+                    }
+                }
+            }
+
+            wakeUpSet = filter(wakeUpSet);
+
+            for (size_t id : wakeUpSet)
+            {
+                m_nodes[id].exec();
+            }
+        } while (wakeUpSet.empty());
 
         return wakeUpSet;
     }
@@ -370,7 +370,9 @@ public:
 
 private:
     uint64_t m_capacity;
-    AutoResetEvent m_autoResetEvent; //must use interprocess if used across process boundaries
+
+    //autoreset event to limit the number of unecessary wake ups
+    AutoResetEvent m_autoResetEvent; //must use interprocess internally if used across process boundaries
     Container<WaitNode> m_nodes;
 
     //protect m_nodes against concurrent modification
