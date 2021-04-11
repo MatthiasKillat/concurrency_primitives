@@ -55,13 +55,7 @@ public:
         notify(RESERVED_INDEX);
     }
 
-    void notify(index_t index) override
-    {
-        TriggerInfo &info = triggerInfoContainer[index];
-        info.numNotified++;
-        semaphore->post();
-    }
-
+    //TODO: make attach/detach thread safe
     bool attach(Trigger &trigger)
     {
         //todo: check whether it is attached
@@ -112,6 +106,8 @@ public:
     //TODO timed wait
 
 private:
+    friend class Trigger;
+
     SemaphoreType *semaphore{nullptr};
 
     //reserve index 0 as internal wake up trigger
@@ -136,6 +132,13 @@ private:
         //TODO: iterate over registered triggers, subtract current known trigger count (soft reset)
         std::vector<NotificationInfo *> notifications;
         return notifications;
+    }
+
+    void notify(index_t index) override
+    {
+        TriggerInfo &info = triggerInfoContainer[index];
+        info.numNotified++;
+        semaphore->post();
     }
 
     static index_t getFreeIndex()
