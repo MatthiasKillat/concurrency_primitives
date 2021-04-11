@@ -32,6 +32,7 @@ public:
         auto &node = m_nodes[id];
         node.setId(id);
 
+        //todo: create factory function for nodes and token
         //we create a WaitToken and hence increment the refCount
         node.incrementRefCount();
 

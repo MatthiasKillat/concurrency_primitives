@@ -29,10 +29,10 @@ add_executable(test_semaphores
 
 target_link_libraries(test_semaphores pthread rt)
 
-add_executable(test_waitset
-  test_waitset.cpp)
+add_executable(test_waitset_mk2
+  test_waitset_mk2.cpp)
 
-target_link_libraries(test_waitset pthread rt)
+target_link_libraries(test_waitset_mk2 pthread rt)
 
 add_executable(test_waitset_pub_sub
   test_waitset_pub_sub.cpp)
