@@ -8,6 +8,7 @@
 #include "notifyable.hpp"
 #include "semaphore.hpp"
 #include "container.hpp"
+#include "autoreset.hpp"
 
 namespace ws
 {
@@ -25,29 +26,19 @@ struct TriggerInfo
     //std::atomic<uint64_t> notified{0};
 };
 
+//we want to use some Signaller "concept"
 //cannot be stored in shared memory like this, can be redesigned to use a non-virtual interface if needed
-template <uint32_t MaxTriggers = 128, typename SemaphoreType = Semaphore>
+template <uint32_t MaxTriggers = 128, typename Signaller = AutoResetEvent<Semaphore>>
 class WaitSet
     : public Notifyable
 {
 public:
     WaitSet() : triggerInfoContainer(MaxTriggers)
     {
-        semaphore = new Semaphore(); //TODO: would be created in shared memory
-
-        if (!semaphore)
-        {
-            std::terminate();
-        }
-        //we need to be able to guarantee that semaphore is valid in the object
     }
 
     ~WaitSet()
     {
-        if (semaphore)
-        {
-            delete semaphore;
-        }
     }
 
     void notify() override
@@ -96,7 +87,7 @@ public:
             return result;
         }
 
-        semaphore->wait();
+        signaller.wait();
 
         result = collectNotifications();
 
@@ -107,8 +98,7 @@ public:
 
 private:
     friend class Trigger;
-
-    SemaphoreType *semaphore{nullptr};
+    Signaller signaller;
 
     //reserve index 0 as internal wake up trigger
 
@@ -138,7 +128,7 @@ private:
     {
         TriggerInfo &info = triggerInfoContainer[index];
         info.numNotified++;
-        semaphore->post();
+        signaller.signal();
     }
 
     static index_t getFreeIndex()
