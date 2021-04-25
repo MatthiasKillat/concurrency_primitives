@@ -29,7 +29,7 @@ void notify(std::chrono::seconds time)
     std::this_thread::sleep_for(time);
     w.notify();
     cout << "notify 1" << std::endl;
-    w.notify(); //ignored due to autoreset event (waitset will not have woken up yet in general)
+    //w.notify(); //may be ignored due to autoreset event (waitset will not have woken up yet in general)
     std::this_thread::sleep_for(time);
     w.notify();
     cout << "notify 2" << std::endl;
@@ -47,9 +47,9 @@ int main(int argc, char **argv)
     do
     {
         cout << "waiting" << endl;
-        w.wait();
+        auto wakeupReasons = w.wait();
         wakeups++;
-        cout << "woke up " << wakeups << std::endl;
+        cout << "woke up " << wakeups << " due to " << wakeupReasons[0]->index << std::endl;
     } while (wakeups < 2);
 
     //ws.notify(1); //private, as intended

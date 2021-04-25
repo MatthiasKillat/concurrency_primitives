@@ -15,15 +15,16 @@ namespace ws
 
 struct NotificationInfo
 {
-    index_t id;
+    index_t index;
 };
 
 struct TriggerInfo
 {
+    TriggerInfo() = default;
     NotificationInfo notificationInfo;
     id_t id;
     uint64_t numNotified{0};
-    //std::atomic<uint64_t> notified{0};
+    //std::atomic<uint64_t> notified; //fix forwarding to use this
 };
 
 //we want to use some Signaller "concept"
@@ -33,8 +34,9 @@ class WaitSet
     : public Notifyable
 {
 public:
-    WaitSet() : triggerInfoContainer(MaxTriggers)
+    WaitSet() : m_triggerInfoContainer(MaxTriggers)
     {
+        attach(m_internalTrigger); //TODO ensure it is the 0 trigger
     }
 
     ~WaitSet()
@@ -46,23 +48,30 @@ public:
         notify(RESERVED_INDEX);
     }
 
-    //TODO: make attach/detach thread safe
+    //TODO: make attach/detach thread safe (lock-free?)
     bool attach(Trigger &trigger)
     {
-        //todo: check whether it is attached
-
-        index_t index = getFreeIndex();
-        if (index == INVALID_INDEX)
+        //TODO check whether it is already attached
+        auto result = m_triggerInfoContainer.emplace();
+        if (!result.has_value())
         {
             return false;
         }
 
+        index_t index = result.value();
+        TriggerInfo &info = m_triggerInfoContainer[index];
+
         trigger.id = generateTriggerId();
+        info.id = trigger.id;
+        info.notificationInfo.index = index;
+
+        m_triggerIndices.push_back(index); //TODO cannot remove currently, implement detach
         return true;
     }
 
     void detach(Trigger &trigger)
     {
+        //TODO implement
         index_t index = trigger.index;
         if (index == INVALID_INDEX)
         {
@@ -82,15 +91,12 @@ public:
     {
         std::vector<NotificationInfo *> result = collectNotifications();
 
-        if (!result.empty())
+        while (result.empty())
         {
-            return result;
+            signaller.wait();
+            result = collectNotifications();
         }
-
-        signaller.wait();
-
-        result = collectNotifications();
-
+        //always non-empty
         return result;
     }
 
@@ -99,11 +105,11 @@ public:
 private:
     friend class Trigger;
     Signaller signaller;
-
-    //reserve index 0 as internal wake up trigger
+    Trigger m_internalTrigger; //reserve index 0 for internal wake up trigger
 
     //TODO: if using a lock-free index pool, could be made lock-free
-    IndexedContainer<TriggerInfo> triggerInfoContainer; //TODO: size template arg for container
+    IndexedContainer<TriggerInfo> m_triggerInfoContainer; //TODO: size template arg for container
+    std::vector<index_t> m_triggerIndices;
 
     static std::atomic<id_t> s_triggerId;
 
@@ -119,23 +125,31 @@ private:
 
     std::vector<NotificationInfo *> collectNotifications()
     {
-        //TODO: iterate over registered triggers, subtract current known trigger count (soft reset)
         std::vector<NotificationInfo *> notifications;
+        for (auto index : m_triggerIndices)
+        {
+            //TODO better container abstraction for use case
+            auto &info = m_triggerInfoContainer[index];
+            //TODO fetch_sub when atomics are used (fix forwarding)
+            if (info.numNotified > 0)
+            {
+                info.numNotified--;
+                notifications.push_back(&info.notificationInfo);
+            }
+        }
         return notifications;
     }
 
     void notify(index_t index) override
     {
-        TriggerInfo &info = triggerInfoContainer[index];
+        TriggerInfo &info = m_triggerInfoContainer[index];
+
+        //TODO check for id match
         info.numNotified++;
         signaller.signal();
     }
 
-    static index_t getFreeIndex()
-    {
-        return INVALID_INDEX;
-    }
-};
+}; // namespace ws
 
 //monotonic, to be reasonably sure we idenfified the correct trigger (modulo wraparound)
 template <uint32_t M, typename S>
