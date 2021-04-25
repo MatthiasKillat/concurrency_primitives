@@ -5,7 +5,7 @@
 template <typename Semaphore>
 class AutoResetEvent;
 
-//for ctor injection
+//for ctor injection, assumes semaphore exists throughout lifetime
 template <typename Semaphore>
 class GenericAutoResetEvent
 {
@@ -44,7 +44,8 @@ public:
 
         if (count < 0)
         {
-            //someone must be waiting, wake up one of them
+            // slow path
+            // someone was (and possibly is) waiting, wake one of them up
             m_semaphore->post();
         }
     }
@@ -53,10 +54,12 @@ public:
     {
         auto count = m_count.fetch_sub(1, std::memory_order_relaxed);
 
-        //if it was 1, we decrement and skip the wait (it was already signaled before the fetch_sub)
+        // if it was 1, we decrement and skip the wait (it was already signaled before the fetch_sub)
+        // (fast path)
         if (count < 1)
         {
-            //otherwise <= 0 and we wait
+            // slow path
+            //otherwise <= 0 and we wait (if signalled in the meantime the we continue right away)
             m_semaphore->wait();
         }
     }
@@ -66,6 +69,8 @@ private:
     //m_count is always <= 1, with 1 indicating it was signalled
     //                             0 not signaled, no waiting threads
     //                             -n, n<0, n threads waiting for a signal
+
+    // could protect against underflow but not needed if there is only a well known number of waiters (e.g. 1)
     std::atomic<int64_t> m_count;
 
     template <typename S>
@@ -104,5 +109,5 @@ public:
     }
 
 private:
-    Semaphore *m_semaphore;
+    Semaphore *m_semaphore; //responsible for semaphore lifetime
 };
