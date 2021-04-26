@@ -45,6 +45,7 @@ public:
 
     void notify() override
     {
+        //or just signal but then we cannot have the non-empty wakeup container
         notify(RESERVED_INDEX);
     }
 

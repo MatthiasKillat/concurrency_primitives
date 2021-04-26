@@ -7,6 +7,7 @@
 #include <atomic>
 
 #include "lock.hpp"
+#include "id_lock.hpp"
 #include "mutex.hpp"
 
 struct NoLock
@@ -71,21 +72,21 @@ int main(int argc, char **argv)
     int iterations = 1000000;
     int n = 8;
 
-    {
-        auto start = std::chrono::high_resolution_clock::now();
-        test<NoLock>(iterations, n);
-        auto end = std::chrono::high_resolution_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-        std::cout << "NoLock test: count " << count << " mutex errors " << mutexError.load() << " time " << elapsed.count() << "ms" << std::endl;
-    }
+    // {
+    //     auto start = std::chrono::high_resolution_clock::now();
+    //     test<NoLock>(iterations, n);
+    //     auto end = std::chrono::high_resolution_clock::now();
+    //     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    //     std::cout << "NoLock test: count " << count << " mutex errors " << mutexError.load() << " time " << elapsed.count() << "ms" << std::endl;
+    // }
 
-    {
-        auto start = std::chrono::high_resolution_clock::now();
-        test<std::mutex>(iterations, n);
-        auto end = std::chrono::high_resolution_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-        std::cout << "std::mutex test: count " << count << " mutex errors " << mutexError.load() << " time " << elapsed.count() << "ms" << std::endl;
-    }
+    // {
+    //     auto start = std::chrono::high_resolution_clock::now();
+    //     test<std::mutex>(iterations, n);
+    //     auto end = std::chrono::high_resolution_clock::now();
+    //     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    //     std::cout << "std::mutex test: count " << count << " mutex errors " << mutexError.load() << " time " << elapsed.count() << "ms" << std::endl;
+    // }
 
     {
         auto start = std::chrono::high_resolution_clock::now();
@@ -94,13 +95,21 @@ int main(int argc, char **argv)
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
         std::cout << "Lock test: count " << count << " mutex errors " << mutexError.load() << " time " << elapsed.count() << "ms" << std::endl;
     }
+    //
+    // {
+    //     auto start = std::chrono::high_resolution_clock::now();
+    //     test<Mutex>(iterations, n);
+    //     auto end = std::chrono::high_resolution_clock::now();
+    //     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    //     std::cout << "Mutex: count " << count << " mutex errors " << mutexError.load() << " time " << elapsed.count() << "ms" << std::endl;
+    // }
 
     {
         auto start = std::chrono::high_resolution_clock::now();
-        test<Mutex>(iterations, n);
+        test<IdLock>(iterations, n);
         auto end = std::chrono::high_resolution_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-        std::cout << "Mutex: count " << count << " mutex errors " << mutexError.load() << " time " << elapsed.count() << "ms" << std::endl;
+        std::cout << "IdLock test: count " << count << " mutex errors " << mutexError.load() << " time " << elapsed.count() << "ms" << std::endl;
     }
 
     return 0;
