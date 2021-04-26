@@ -9,7 +9,7 @@
 
 using lock_id_t = int32_t;
 
-class IdLock
+class IdAwareLock
 {
 
 private:
@@ -60,14 +60,14 @@ private:
     // }
 
 public:
-    IdLock(uint32_t maxSpinIterations = 1)
+    IdAwareLock(uint32_t maxSpinIterations = 1)
         : MAX_SPINNING_ACQUIRE_ITERATIONS(maxSpinIterations > 0 ? maxSpinIterations : 1)
     {
         //futexWord = reinterpret_cast<int *>(&state);
     }
 
-    IdLock(const IdLock &) = delete;
-    IdLock(IdLock &&) = delete;
+    IdAwareLock(const IdAwareLock &) = delete;
+    IdAwareLock(IdAwareLock &&) = delete;
 
     //only positive values (>0), can foolproof this later (need int32_t for futexwords though)
     void lock(lock_id_t id = 1)
@@ -76,13 +76,17 @@ public:
         for (uint32_t i = 0; i < MAX_SPINNING_ACQUIRE_ITERATIONS; ++i)
         {
             auto knownState = compareExchangeState(UNLOCKED, id);
-            if (knownState == UNLOCKED)
+            if (knownState == UNLOCKED || knownState == id) // for recursive locking
             {
                 lockingId.store(id, std::memory_order_relaxed);
                 return;
             }
             else if (knownState == CONTESTED)
             {
+                if (lockingId == id) // recursive locking
+                {
+                    return;
+                }
                 //contested, do not try to spin any more and sleep instead
                 //(promotes fairness with respect to threads trying to acquire the lock)
                 //sleepIfContested(); //could use a semaphore to wait as well
