@@ -7,57 +7,35 @@
 #include <atomic>
 #include "semaphore.hpp"
 
-using lock_id_t = int32_t;
+using lock_id_t = uint32_t; //guaranteed to fit into an int64_t
 
 class IdAwareLock
 {
 
 private:
-    enum State : int32_t
-    {
-        UNLOCKED = -1, //unlocked, i.e. no one has the lock
-        CONTESTED = -2 //there are (possibly) other threads waiting for the lock
-    };                 //everything else is locked
+    using state_t = int64_t;
+
+    static constexpr state_t UNLOCKED = -1;
+    static constexpr state_t CONTESTED = -2;
 
     const uint32_t MAX_SPINNING_ACQUIRE_ITERATIONS{1000};
 
-    //must be 32 bit int for futex to work (make this explicit int32_t)
     //if we do not use the futex anymore (but a semaphore instead) this can be relaxed
-    std::atomic<int32_t> state{UNLOCKED};
-    std::atomic<lock_id_t> lockingId;
-
-    //note: it is fairly obvious how to make this usable as interprocess mutex:
-    //the futex word must be available in different address space,
-    // i.e. the atomic must be shared via shared memory between processes
-    // a semaphore implementation using a futex can do this as well
-    //int32_t *futexWord;
+    std::atomic<state_t> state{UNLOCKED};
+    std::atomic<int64_t> lockingId{UNLOCKED};
 
     Semaphore semaphore;
 
-    int compareExchangeState(int32_t expected, int32_t desired)
+    state_t compareExchangeState(state_t expected, state_t desired)
     {
-        state.compare_exchange_strong(expected, desired, std::memory_order_relaxed, std::memory_order_relaxed);
+        state.compare_exchange_strong(expected, desired, std::memory_order_acq_rel, std::memory_order_acquire);
         return expected; //always returns the old value (which is loaded by compare_exchange in the failure case)
     }
 
-    int32_t exchangeState(int32_t desired)
+    state_t exchangeState(state_t desired)
     {
-        return state.exchange(desired, std::memory_order_relaxed);
+        return state.exchange(desired, std::memory_order_acq_rel);
     }
-
-    // void sleepIfContested()
-    // {
-    //     //we only sleep on the futexWord if the lock is contested
-    //     //the last 3 arguments are unused by the FUTEX_WAIT call
-    //     syscall(SYS_futex, futexWord, FUTEX_WAIT, CONTESTED, 0, 0, 0);
-    // }
-
-    // void wakeOne()
-    // {
-    //     //we wake 1 thread waiting on the futexWord if there is one waiting, which the API call can determine
-    //     //the last 3 arguments are unused by the FUTEX_WAKE call
-    //     syscall(SYS_futex, futexWord, 1, 0, 0, 0);
-    // }
 
 public:
     IdAwareLock(uint32_t maxSpinIterations = 1)
@@ -69,8 +47,8 @@ public:
     IdAwareLock(const IdAwareLock &) = delete;
     IdAwareLock(IdAwareLock &&) = delete;
 
-    //only positive values (>0), can foolproof this later (need int32_t for futexwords though)
-    void lock(lock_id_t id = 1)
+    //only positive values (>0), can foolproof this later
+    void lock(lock_id_t id = 0)
     {
         //try to acquire the lock by spinning
         for (uint32_t i = 0; i < MAX_SPINNING_ACQUIRE_ITERATIONS; ++i)
@@ -119,7 +97,6 @@ public:
         //change the lock state back to unlocked and wake someone if it was contested
         if (exchangeState(UNLOCKED) == CONTESTED)
         {
-            //wakeOne();
             semaphore.post();
         }
     }
@@ -128,18 +105,20 @@ public:
     {
         if (getLockingId() != id)
         {
+            std::cout << "incorrect unlock id" << std::endl;
             std::terminate(); //protocol error
         }
-        lockingId.store(0); //slightly out of sync, but has to be done before exchange
+        lockingId.store(UNLOCKED); //slightly out of sync, but has to be done before exchange
+
         //change the lock state back to unlocked and wake someone if it was contested
         if (exchangeState(UNLOCKED) == CONTESTED)
         {
-            //wakeOne();
             semaphore.post();
         }
     }
 
-    lock_id_t getLockingId()
+    //return -1 for unlocked
+    int64_t getLockingId()
     {
         return lockingId.load(std::memory_order_relaxed);
     }

@@ -7,7 +7,7 @@
 #include <atomic>
 
 #include "lock.hpp"
-#include "id_lock.hpp"
+#include "id_aware_lock.hpp"
 #include "mutex.hpp"
 
 struct NoLock
@@ -25,7 +25,7 @@ std::atomic<int> users{0};
 std::atomic<uint64_t> mutexError{0};
 
 template <typename LockType>
-void work(LockType &lock, int a = 1, int iterations = 1000000)
+void work(LockType &lock, int id, int a = 1, int iterations = 1000000)
 {
     for (int i = 0; i < iterations; ++i)
     {
@@ -43,6 +43,25 @@ void work(LockType &lock, int a = 1, int iterations = 1000000)
     }
 }
 
+template <>
+void work<IdAwareLock>(IdAwareLock &lock, int id, int a, int iterations)
+{
+    for (int i = 0; i < iterations; ++i)
+    {
+        lock.lock(id);
+
+        if (users.fetch_add(1, std::memory_order_acq_rel) != 0)
+        {
+            mutexError.fetch_add(1);
+        }
+
+        count += a;
+
+        users.fetch_sub(1, std::memory_order_release);
+        lock.unlock(id);
+    }
+}
+
 template <typename LockType>
 void test(int iterations = 1000000, int n = 4)
 {
@@ -55,10 +74,11 @@ void test(int iterations = 1000000, int n = 4)
     users.store(0, std::memory_order_relaxed);
     mutexError.store(0, std::memory_order_relaxed);
 
+    lock_id_t id = 1;
     for (int i = 0; i < n; ++i)
     {
-        threads.emplace_back(work<LockType>, std::ref(lock), 1, iterations);
-        threads.emplace_back(work<LockType>, std::ref(lock), -1, iterations);
+        threads.emplace_back(work<LockType>, std::ref(lock), id++, 1, iterations);
+        threads.emplace_back(work<LockType>, std::ref(lock), id++, -1, iterations);
     }
 
     for (auto &thread : threads)
@@ -106,7 +126,7 @@ int main(int argc, char **argv)
 
     {
         auto start = std::chrono::high_resolution_clock::now();
-        test<IdLock>(iterations, n);
+        test<IdAwareLock>(iterations, n);
         auto end = std::chrono::high_resolution_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
         std::cout << "IdLock test: count " << count << " mutex errors " << mutexError.load() << " time " << elapsed.count() << "ms" << std::endl;
