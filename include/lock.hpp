@@ -33,13 +33,13 @@ private:
 
     int compareExchangeState(int32_t expected, int32_t desired)
     {
-        state.compare_exchange_strong(expected, desired, std::memory_order_relaxed, std::memory_order_relaxed);
+        state.compare_exchange_strong(expected, desired, std::memory_order_acq_rel, std::memory_order_acquire);
         return expected; //always returns the old value (which is loaded by compare_exchange in the failure case)
     }
 
     int32_t exchangeState(int32_t desired)
     {
-        return state.exchange(desired, std::memory_order_relaxed);
+        return state.exchange(desired, std::memory_order_release);
     }
 
     void sleepIfContested()
