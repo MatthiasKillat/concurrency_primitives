@@ -7,10 +7,12 @@
 #include <atomic>
 #include "semaphore.hpp"
 
-using lock_id_t = uint32_t; //guaranteed to fit into an int64_t
-
+//can be used to build a recursive mutex if id is a unique thread id
 class IdAwareLock
 {
+public:
+    //guaranteed to fit into an int64_t
+    using id_t = uint32_t;
 
 private:
     using state_t = int64_t;
@@ -41,14 +43,13 @@ public:
     IdAwareLock(uint32_t maxSpinIterations = 1)
         : MAX_SPINNING_ACQUIRE_ITERATIONS(maxSpinIterations > 0 ? maxSpinIterations : 1)
     {
-        //futexWord = reinterpret_cast<int *>(&state);
     }
 
     IdAwareLock(const IdAwareLock &) = delete;
     IdAwareLock(IdAwareLock &&) = delete;
 
     //only positive values (>0), can foolproof this later
-    void lock(lock_id_t id = 0)
+    void lock(id_t id = 0)
     {
         //try to acquire the lock by spinning
         for (uint32_t i = 0; i < MAX_SPINNING_ACQUIRE_ITERATIONS; ++i)
@@ -61,13 +62,12 @@ public:
             }
             else if (knownState == CONTESTED)
             {
-                if (lockingId == id) // recursive locking
+                if (getLockingId() == id) // for recursive locking
                 {
                     return;
                 }
                 //contested, do not try to spin any more and sleep instead
                 //(promotes fairness with respect to threads trying to acquire the lock)
-                //sleepIfContested(); //could use a semaphore to wait as well
                 semaphore.wait();
                 break;
             }
@@ -76,15 +76,15 @@ public:
         //spinning failed, assume the lock is contested and change its state accordingly,
         //sleep while it is actually contested or locked
 
+        //change to contested, waiting for it to be unlocked
         while (exchangeState(CONTESTED) != UNLOCKED)
         {
             //note that the contested state can be a false positive, i.e. might not be contested anymore when
-            //we set it to contested, but then we do not sleep here,
+            //we set it to contested, but then we do not sleep here since we already issued a post,
             //i.e. this is just a pessimistic but safe assumption which optimzes the logic
 
             //note that we also do not sleep when someone sets it back to UNLOCKED before the exchange
             //and just set it to CONTESTED (false positive) and return, having acquired the lock
-            //sleepIfContested();
             semaphore.wait();
         }
 
@@ -93,7 +93,8 @@ public:
 
     void unlock()
     {
-        lockingId.store(0); //slightly out of sync, but has to be done before exchange
+        lockingId.store(UNLOCKED); //slightly out of sync, but has to be done before exchange
+
         //change the lock state back to unlocked and wake someone if it was contested
         if (exchangeState(UNLOCKED) == CONTESTED)
         {
@@ -101,13 +102,14 @@ public:
         }
     }
 
-    void unlock(lock_id_t id)
+    void unlock(id_t id)
     {
         if (getLockingId() != id)
         {
             std::cout << "incorrect unlock id" << std::endl;
             std::terminate(); //protocol error
         }
+
         lockingId.store(UNLOCKED); //slightly out of sync, but has to be done before exchange
 
         //change the lock state back to unlocked and wake someone if it was contested

@@ -74,7 +74,7 @@ void test(int iterations = 1000000, int n = 4)
     users.store(0, std::memory_order_relaxed);
     mutexError.store(0, std::memory_order_relaxed);
 
-    lock_id_t id = 1;
+    IdAwareLock::id_t id = 1;
     for (int i = 0; i < n; ++i)
     {
         threads.emplace_back(work<LockType>, std::ref(lock), id++, 1, iterations);
